@@ -1,39 +1,27 @@
+import streamlit as st
 import pandas as pd
 import numpy as np
-import streamlit as st
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 
 # ==========================================
-# 1. GÉNÉRATION DU FICHIER DE TEST (30 JOURS)
+# 1. CONFIGURATION DE L'INTERFACE
 # ==========================================
-def generer_donnees_test():
-    jours = [f'Jour_{i}' for i in range(1, 31)]
-    produits = ['AUGMENTIN ADULTE', 'PARACETAMOL 1G', 'VENTOLINE', 'SPASFON', 'AMLO 5MG']
-    data = {'DESIGNATION': produits}
+st.set_page_config(page_title="Pharma-Predict | Pharmakode", page_icon="💊")
 
-    for j in jours:
-        # On simule une tendance légèrement haussière pour tester l'IA
-        data[j] = np.random.randint(5, 15, size=5) + np.array([0, 1, 2, 3, 4])
-
-    df = pd.DataFrame(data)
-    # Stocks critiques pour certains pour déclencher des alertes
-    df['STOCK_ACTUEL'] = [50, 200, 15, 80, 10] 
-    
-    filename = 'test_pharmacie_30j.csv'
-    df.to_csv(filename, index=False)
-    print(f"✅ Fichier '{filename}' généré pour l'analyse.\n")
-    return filename
+st.title("💊 Pharma-Predict (by Pharmakode)")
+st.subheader("Anticipez vos ruptures de stock grâce au Machine Learning")
+st.write("---")
 
 # ==========================================
-# 2. LE CERVEAU IA (TENSORFLOW LSTM)
+# 2. LE CERVEAU IA (Scikit-Learn)
 # ==========================================
 def predire_prochaine_vente(historique_30j):
-    # On transforme les 30 jours en coordonnées X
+    # Transformation des 30 jours pour l'algorithme
     X = np.array(range(len(historique_30j))).reshape(-1, 1)
     y = np.array(historique_30j)
     
-    # On utilise une régression polynomiale (elle détecte les courbes/accélérations)
+    # La Régression Polynomiale (détecte les accélérations de ventes)
     poly = PolynomialFeatures(degree=2)
     X_poly = poly.fit_transform(X)
     
@@ -47,40 +35,48 @@ def predire_prochaine_vente(historique_30j):
     return max(0, prediction)
 
 # ==========================================
-# 3. SCRIPT PRINCIPAL D'ANALYSE
+# 3. L'APPLICATION UTILISATEUR
 # ==========================================
-def main():
-    # Générer le fichier si absent
-    file_path = generer_donnees_test()
-    
-    # Lire les données
-    df = pd.read_csv(file_path)
-    cols_jours = [f'Jour_{i}' for i in range(1, 31)]
-    
-    print("🚀 Lancement de l'analyse prédictive (TensorFlow LSTM)...")
-    print("-" * 70)
-    print(f"{'PRODUIT':<20} | {'STOCK':<6} | {'PRÉD. IA':<10} | {'JOURS REST.'}")
-    print("-" * 70)
-    
-    for _, row in df.iterrows():
-        nom = row['DESIGNATION']
-        stock = row['STOCK_ACTUEL']
-        historique = row[cols_jours].values.astype(float)
-        
-        # Calcul par l'IA
-        prediction = predire_prochaine_vente(historique)
-        
-        # Calcul du temps restant (Stock / Prédiction de demain)
-        jours_restants = stock / prediction if prediction > 0.1 else 99
-        
-        # Formatage de l'alerte
-        alerte = ""
-        if jours_restants < 5:
-            alerte = "⚠️ RUPTURE PROCHE"
-        elif jours_restants < 2:
-            alerte = "🚨 URGENCE COMMANDE"
-            
-        print(f"{nom[:20]:<20} | {stock:<6} | {prediction:<10.2f} | {int(jours_restants):<3} jours {alerte}")
+st.info("💡 Déposez le fichier de test de 30 jours (test_pharmacie_30j.csv)")
+uploaded_file = st.file_uploader("Fichier d'historique (CSV)", type=["csv"])
 
-if __name__ == "__main__":
-    main()
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+    st.success("Fichier chargé avec succès !")
+    
+    # On identifie automatiquement les colonnes de jours (Jour_1, Jour_2, etc.)
+    colonnes_jours = [col for col in df.columns if 'Jour_' in col]
+    
+    if st.button("🚀 Lancer le Diagnostic IA"):
+        st.write("### 🚨 Analyse Prédictive des Stocks")
+        
+        # On crée des colonnes pour un affichage propre
+        col1, col2, col3 = st.columns([2, 1, 1])
+        col1.write("**Produit**")
+        col2.write("**Prédiction Demain**")
+        col3.write("**Statut**")
+        st.write("---")
+        
+        # On analyse chaque médicament
+        for index, row in df.iterrows():
+            nom = row['DESIGNATION']
+            stock = row['STOCK_ACTUEL']
+            historique = row[colonnes_jours].values.astype(float)
+            
+            # Appel du Machine Learning
+            prediction = predire_prochaine_vente(historique)
+            
+            # Calcul de sécurité
+            jours_restants = stock / prediction if prediction > 0.1 else 99
+            
+            # Affichage visuel selon l'urgence
+            if jours_restants < 5:
+                st.error(f"**{nom}** | Reste: {int(jours_restants)} jours")
+                st.caption(f"Vente estimée demain : {prediction:.1f} boîtes")
+            elif jours_restants < 15:
+                st.warning(f"**{nom}** | Reste: {int(jours_restants)} jours")
+            else:
+                st.success(f"**{nom}** | Stock sain (> 15 j)")
+
+st.write("---")
+st.caption("Une solution propulsée par Pharmakode - Technologie d'aide à la décision pour l'officine.")
