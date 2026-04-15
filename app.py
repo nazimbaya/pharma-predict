@@ -33,7 +33,6 @@ def predire_prochaine_vente(historique_30j):
     prediction = model.predict(X_31)[0]
     
     return max(0, prediction)
-
 # ==========================================
 # 3. L'APPLICATION UTILISATEUR
 # ==========================================
@@ -47,6 +46,11 @@ if uploaded_file is not None:
     # On identifie automatiquement les colonnes de jours (Jour_1, Jour_2, etc.)
     colonnes_jours = [col for col in df.columns if 'Jour_' in col]
     
+    # LE FILET DE SÉCURITÉ EST ICI :
+    if len(colonnes_jours) == 0:
+        st.error("❌ Erreur : L'IA a besoin d'un historique journalier. Votre fichier ne contient pas les colonnes 'Jour_1', 'Jour_2', etc.")
+        st.stop() # Arrête le script proprement sans faire de crash
+        
     if st.button("🚀 Lancer le Diagnostic IA"):
         st.write("### 🚨 Analyse Prédictive des Stocks")
         
@@ -77,6 +81,3 @@ if uploaded_file is not None:
                 st.warning(f"**{nom}** | Reste: {int(jours_restants)} jours")
             else:
                 st.success(f"**{nom}** | Stock sain (> 15 j)")
-
-st.write("---")
-st.caption("Une solution propulsée par Pharmakode - Technologie d'aide à la décision pour l'officine.")
