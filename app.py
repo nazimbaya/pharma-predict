@@ -1,10 +1,8 @@
 import pandas as pd
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
-from sklearn.preprocessing import MinMaxScaler
-import os
+import streamlit as st
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
 
 # ==========================================
 # 1. GÉNÉRATION DU FICHIER DE TEST (30 JOURS)
@@ -31,32 +29,22 @@ def generer_donnees_test():
 # 2. LE CERVEAU IA (TENSORFLOW LSTM)
 # ==========================================
 def predire_prochaine_vente(historique_30j):
-    # Normalisation des données entre 0 et 1 (Essentiel pour LSTM)
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    data_scaled = scaler.fit_transform(np.array(historique_30j).reshape(-1, 1))
+    # On transforme les 30 jours en coordonnées X
+    X = np.array(range(len(historique_30j))).reshape(-1, 1)
+    y = np.array(historique_30j)
     
-    # Transformation en "Cube" pour TensorFlow : [1 échantillon, 30 timesteps, 1 feature]
-    X_input = data_scaled.reshape(1, 30, 1)
+    # On utilise une régression polynomiale (elle détecte les courbes/accélérations)
+    poly = PolynomialFeatures(degree=2)
+    X_poly = poly.fit_transform(X)
     
-    # Architecture du modèle
-    model = Sequential([
-        LSTM(64, activation='relu', input_shape=(30, 1), return_sequences=False),
-        Dropout(0.2),
-        Dense(32, activation='relu'),
-        Dense(1)
-    ])
+    model = LinearRegression()
+    model.fit(X_poly, y)
     
-    model.compile(optimizer='adam', loss='mse')
+    # Prédit le jour 31
+    X_31 = poly.transform([[31]])
+    prediction = model.predict(X_31)[0]
     
-    # Entraînement rapide sur les données du produit (10 epochs pour la démo)
-    # En prod, on utiliserait un modèle pré-entraîné pour la vitesse
-    model.fit(X_input, np.array([data_scaled[-1]]), epochs=15, verbose=0)
-    
-    # Prédiction
-    pred_scaled = model.predict(X_input, verbose=0)
-    vente_finale = scaler.inverse_transform(pred_scaled)
-    
-    return max(0, vente_finale[0][0])
+    return max(0, prediction)
 
 # ==========================================
 # 3. SCRIPT PRINCIPAL D'ANALYSE
