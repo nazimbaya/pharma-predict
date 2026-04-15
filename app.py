@@ -33,51 +33,67 @@ def predire_prochaine_vente(historique_30j):
     prediction = model.predict(X_31)[0]
     
     return max(0, prediction)
+
 # ==========================================
-# 3. L'APPLICATION UTILISATEUR
+# 3. L'APPLICATION UTILISATEUR (Version Pro)
 # ==========================================
-st.info("💡 Déposez le fichier de test de 30 jours (test_pharmacie_30j.csv)")
-uploaded_file = st.file_uploader("Fichier d'historique (CSV)", type=["csv"])
+st.info("💡 Déposez votre export de stock (Excel ou CSV)")
+uploaded_file = st.file_uploader("Fichier d'historique", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
+    # Lecture du fichier
+    df = pd.read_csv(uploaded_file) 
     st.success("Fichier chargé avec succès !")
+    st.write("---")
     
-    # On identifie automatiquement les colonnes de jours (Jour_1, Jour_2, etc.)
-    colonnes_jours = [col for col in df.columns if 'Jour_' in col]
+    # --- DÉBUT DE LA ZONE DE MAPPING ---
+    st.write("### ⚙️ Étape 1 : Identifiez vos colonnes")
+    st.caption("Aidez l'IA à comprendre votre fichier en associant vos colonnes.")
     
-    # LE FILET DE SÉCURITÉ EST ICI :
-    if len(colonnes_jours) == 0:
-        st.error("❌ Erreur : L'IA a besoin d'un historique journalier. Votre fichier ne contient pas les colonnes 'Jour_1', 'Jour_2', etc.")
-        st.stop() # Arrête le script proprement sans faire de crash
+    colonnes_disponibles = df.columns.tolist()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        col_nom = st.selectbox("1. Colonne du Nom du Produit :", colonnes_disponibles)
+    with col2:
+        col_stock = st.selectbox("2. Colonne du Stock Actuel :", colonnes_disponibles)
         
-    if st.button("🚀 Lancer le Diagnostic IA"):
-        st.write("### 🚨 Analyse Prédictive des Stocks")
-        
-        # On crée des colonnes pour un affichage propre
-        col1, col2, col3 = st.columns([2, 1, 1])
-        col1.write("**Produit**")
-        col2.write("**Prédiction Demain**")
-        col3.write("**Statut**")
-        st.write("---")
-        
-        # On analyse chaque médicament
-        for index, row in df.iterrows():
-            nom = row['DESIGNATION']
-            stock = row['STOCK_ACTUEL']
-            historique = row[colonnes_jours].values.astype(float)
+    cols_historique = st.multiselect("3. Colonnes de l'historique des ventes (ex: les 30 derniers jours) :", colonnes_disponibles)
+    # --- FIN DE LA ZONE DE MAPPING ---
+
+    st.write("---")
+    
+    # On ne permet de lancer l'IA que si l'utilisateur a choisi ses colonnes d'historique
+    if len(cols_historique) < 2:
+        st.warning("⚠️ Veuillez sélectionner au moins 2 colonnes d'historique pour que l'IA puisse détecter une tendance.")
+    else:
+        if st.button("🚀 Étape 2 : Lancer le Diagnostic IA"):
+            st.write("### 🚨 Analyse Prédictive des Stocks")
             
-            # Appel du Machine Learning
-            prediction = predire_prochaine_vente(historique)
+            # Affichage de l'en-tête du tableau des résultats
+            c1, c2, c3 = st.columns([2, 1, 1])
+            c1.write("**Produit**")
+            c2.write("**Prédiction Demain**")
+            c3.write("**Statut**")
+            st.write("---")
             
-            # Calcul de sécurité
-            jours_restants = stock / prediction if prediction > 0.1 else 99
-            
-            # Affichage visuel selon l'urgence
-            if jours_restants < 5:
-                st.error(f"**{nom}** | Reste: {int(jours_restants)} jours")
-                st.caption(f"Vente estimée demain : {prediction:.1f} boîtes")
-            elif jours_restants < 15:
-                st.warning(f"**{nom}** | Reste: {int(jours_restants)} jours")
-            else:
-                st.success(f"**{nom}** | Stock sain (> 15 j)")
+            # Boucle d'analyse sur les colonnes choisies par le pharmacien !
+            for index, row in df.iterrows():
+                nom = row[col_nom]          # Utilise le choix de l'utilisateur
+                stock = row[col_stock]      # Utilise le choix de l'utilisateur
+                
+                # Récupère uniquement les colonnes d'historique sélectionnées
+                historique = row[cols_historique].values.astype(float) 
+                
+                # Appel du Machine Learning (ta fonction Scikit-Learn)
+                prediction = predire_prochaine_vente(historique)
+                
+                # Calcul de sécurité
+                jours_restants = stock / prediction if prediction > 0.1 else 99
+                
+                # Affichage des alertes
+                if jours_restants < 5:
+                    st.error(f"**{nom}** | Reste: {int(jours_restants)} jours")
+                    st.caption(f"Vente estimée demain : {prediction:.1f} boîtes")
+                elif jours_restants < 15:
+                    st.warning(f"**{nom}** | Reste: {int(jours_restants)} jours")
