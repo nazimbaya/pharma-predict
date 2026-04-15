@@ -9,91 +9,83 @@ from sklearn.preprocessing import PolynomialFeatures
 # ==========================================
 st.set_page_config(page_title="Pharma-Predict | Pharmakode", page_icon="💊")
 
-st.title("💊 Pharma-Predict (by Pharmakode)")
-st.subheader("Anticipez vos ruptures de stock grâce au Machine Learning")
+st.title("💊 Pharma-Predict (Version Chronologique)")
+st.subheader("Analyse de tendance par Intelligence Artificielle")
 st.write("---")
 
 # ==========================================
 # 2. LE CERVEAU IA (Scikit-Learn)
 # ==========================================
-def predire_prochaine_vente(historique_30j):
-    # Transformation des 30 jours pour l'algorithme
-    X = np.array(range(len(historique_30j))).reshape(-1, 1)
-    y = np.array(historique_30j)
+def predire_prochaine_vente(historique):
+    # Si on a trop peu de données, on fait une moyenne simple
+    if len(historique) < 3:
+        return np.mean(historique) if len(historique) > 0 else 0
+        
+    # Transformation de l'historique pour l'algorithme
+    X = np.array(range(len(historique))).reshape(-1, 1)
+    y = np.array(historique)
     
-    # La Régression Polynomiale (détecte les accélérations de ventes)
+    # Régression Polynomiale pour détecter les accélérations/ralentissements
     poly = PolynomialFeatures(degree=2)
     X_poly = poly.fit_transform(X)
     
     model = LinearRegression()
     model.fit(X_poly, y)
     
-    # Prédit le jour 31
-    X_31 = poly.transform([[31]])
-    prediction = model.predict(X_31)[0]
+    # Prédiction du point suivant (demain)
+    X_next = poly.transform([[len(historique)]])
+    prediction = model.predict(X_next)[0]
     
-    return max(0, prediction)
+    return max(0.1, prediction) # On évite le zéro pour la division
 
 # ==========================================
-# 3. L'APPLICATION UTILISATEUR (Version Pro)
+# 3. L'APPLICATION UTILISATEUR
 # ==========================================
-st.info("💡 Déposez votre export de stock (Excel ou CSV)")
-uploaded_file = st.file_uploader("Fichier d'historique", type=["csv", "xlsx"])
+uploaded_file = st.file_uploader("Déposez votre fichier (Date, Vente, Stock)", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
-    # Lecture du fichier
-    df = pd.read_csv(uploaded_file) 
-    st.success("Fichier chargé avec succès !")
-    st.write("---")
+    df = pd.read_csv(uploaded_file)
+    st.success("Fichier chargé !")
     
-    # --- DÉBUT DE LA ZONE DE MAPPING ---
-    st.write("### ⚙️ Étape 1 : Identifiez vos colonnes")
-    st.caption("Aidez l'IA à comprendre votre fichier en associant vos colonnes.")
-    
-    colonnes_disponibles = df.columns.tolist()
+    st.write("### ⚙️ Étape 1 : Mappage des colonnes")
+    cols = df.columns.tolist()
     
     col1, col2 = st.columns(2)
     with col1:
-        col_nom = st.selectbox("1. Colonne du Nom du Produit :", colonnes_disponibles)
+        col_nom = st.selectbox("Nom du Produit", cols)
+        col_date = st.selectbox("Colonne Date", cols)
     with col2:
-        col_stock = st.selectbox("2. Colonne du Stock Actuel :", colonnes_disponibles)
-        
-    cols_historique = st.multiselect("3. Colonnes de l'historique des ventes (ex: les 30 derniers jours) :", colonnes_disponibles)
-    # --- FIN DE LA ZONE DE MAPPING ---
+        col_vente = st.selectbox("Colonne Ventes (Unités)", cols)
+        col_stock = st.selectbox("Colonne Stock actuel", cols)
 
     st.write("---")
     
-    # On ne permet de lancer l'IA que si l'utilisateur a choisi ses colonnes d'historique
-    if len(cols_historique) < 2:
-        st.warning("⚠️ Veuillez sélectionner au moins 2 colonnes d'historique pour que l'IA puisse détecter une tendance.")
-    else:
-        if st.button("🚀 Étape 2 : Lancer le Diagnostic IA"):
-            st.write("### 🚨 Analyse Prédictive des Stocks")
+    if st.button("🚀 Lancer le Diagnostic IA"):
+        # Conversion de la date
+        df[col_date] = pd.to_datetime(df[col_date])
+        
+        st.write("### 🚨 Analyse des Ruptures Prévues")
+        
+        # On groupe par produit pour analyser chaque historique séparément
+        produits = df[col_nom].unique()
+        
+        for p in produits:
+            # On récupère les données du produit triées par date
+            data_p = df[df[col_nom] == p].sort_values(by=col_date)
             
-            # Affichage de l'en-tête du tableau des résultats
-            c1, c2, c3 = st.columns([2, 1, 1])
-            c1.write("**Produit**")
-            c2.write("**Prédiction Demain**")
-            c3.write("**Statut**")
-            st.write("---")
+            # On extrait les séries
+            historique_ventes = data_p[col_vente].values
+            dernier_stock = data_p[col_stock].iloc[-1]
             
-            # Boucle d'analyse sur les colonnes choisies par le pharmacien !
-            for index, row in df.iterrows():
-                nom = row[col_nom]          # Utilise le choix de l'utilisateur
-                stock = row[col_stock]      # Utilise le choix de l'utilisateur
-                
-                # Récupère uniquement les colonnes d'historique sélectionnées
-                historique = row[cols_historique].values.astype(float) 
-                
-                # Appel du Machine Learning (ta fonction Scikit-Learn)
-                prediction = predire_prochaine_vente(historique)
-                
-                # Calcul de sécurité
-                jours_restants = stock / prediction if prediction > 0.1 else 99
-                
-                # Affichage des alertes
-                if jours_restants < 5:
-                    st.error(f"**{nom}** | Reste: {int(jours_restants)} jours")
-                    st.caption(f"Vente estimée demain : {prediction:.1f} boîtes")
-                elif jours_restants < 15:
-                    st.warning(f"**{nom}** | Reste: {int(jours_restants)} jours")
+            # Prédiction IA
+            prediction_demain = predire_prochaine_vente(historique_ventes)
+            
+            # Calcul de couverture
+            jours_restants = dernier_stock / prediction_demain
+            
+            # Affichage des alertes
+            if jours_restants < 5:
+                st.error(f"**{p}** | Stock: {int(dernier_stock)} | **Rupture sous {int(jours_restants)} jours**")
+                st.caption(f"Tendance IA : {prediction_demain:.2f} ventes prévues demain.")
+            elif jours_restants < 15:
+                st.warning(f"**{p}** | Stock: {int(dernier_stock)} | Couverture : {int(jours_restants)} jours")
